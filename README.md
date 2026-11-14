@@ -8,12 +8,20 @@
 
 在本仓库的 [Actions → Build DSH plugin and Chrome extension](https://github.com/Lemonade-22/dsh-chrome-use/actions/workflows/check.yml) 中点 **Run workflow** 可手动构建；推送代码或提交 PR 时也会自动运行。
 
-构建先运行 Windows、macOS、Linux 上的 Node.js 22/24 检查和测试，成功后生成两个 Artifact，保留 30 天：
+构建先运行 Windows、macOS、Linux 上的 Node.js 22/24 检查和测试。推送与手动构建成功后，将两个安装包和 `SHA256SUMS.txt` 上传到本仓库的 [Releases](https://github.com/Lemonade-22/dsh-chrome-use/releases)。PR 构建只上传 Artifacts。
 
-- `dsh-plugin-<版本>`：DSH 插件安装包 `.tgz`。
-- `chrome-extension-<版本>`：Chrome 扩展 `.zip` 及 SHA-256 校验文件。
+- Release 标题：`dsh-chrome-use-v0.10.1-2026.11.14-18.30.00`。
+- 安装包：`dsh-plugin-v<版本>-<北京时间>-<运行ID>-<重试次数>.tgz`、`chrome-extension-v<版本>-<北京时间>-<运行ID>-<重试次数>.zip`。
+- 每次运行使用独立的 `build-` 标签，重试也不会覆盖之前的产物；构建 Release 不抢占正式版本的 Latest 标记。
+- Actions 页面同时提供两个 Artifact，保留 30 天。Artifact 本身是外层 ZIP，解压后才是安装文件。
 
-打开成功的运行记录，在页面底部 **Artifacts** 下载。Artifact 本身是外层压缩包，解压后才是安装文件。Chrome 扩展还需将内层 ZIP 解压到固定目录，在 `chrome://extensions` 开启开发者模式并“加载已解压的扩展程序”。DSH 的 `.tgz` 可通过 `dsh plugin --profile desktop add "安装包的绝对路径"` 安装，完成后重启 DSH。
+Chrome 扩展需解压到固定目录，在 `chrome://extensions` 开启开发者模式并“加载已解压的扩展程序”。DSH 的 `.tgz` 可通过 `dsh plugin --profile desktop add "安装包的绝对路径"` 安装，完成后重启 DSH。
+
+### 自动清理
+
+[Auto-Clean-Self](https://github.com/Lemonade-22/dsh-chrome-use/actions/workflows/Auto-Clean-Self.yml) 移植自你的 OpenWRT-CI_Self 仓库，每天北京时间 **05:21** 运行。按 Release 标题中的插件版本分组，每个版本默认保留最新 **2 个**构建 Release，其余 Release 和对应标签一起删除。GitHub 标记为 Latest 的 Release 永不删除，没有时间后缀的正式 Release 也不参与清理。
+
+手动运行可设置保留数量、是否删除标签；默认 `dry_run=true` 只列出计划，不执行删除。定时运行会实际清理。此工作流不删除 Actions 运行记录；Artifact 按上面的 30 天保留期到期。
 
 ## 安装
 

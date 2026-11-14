@@ -26,6 +26,8 @@ jobs:
   package:
     runs-on: ubuntu-latest
     needs: test
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,33 +38,67 @@ jobs:
       - run: npm run build:client
       - run: npm run package
       - run: npm pack --pack-destination dist
-      - name: Describe downloadable packages
+      - name: Name build packages
         shell: bash
         run: |
+          set -euo pipefail
           VERSION=$(node -p 'require("./package.json").version')
+          STAMP=$(TZ=Asia/Shanghai date +'%Y.%m.%d-%H.%M.%S')
+          BUILD="v${VERSION}-${STAMP}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mv "dist/dsh-chrome-use-${VERSION}.zip" "dist/chrome-extension-${BUILD}.zip"
+          mv "dist/dsh-chrome-use-${VERSION}.tgz" "dist/dsh-plugin-${BUILD}.tgz"
+          rm "dist/dsh-chrome-use-${VERSION}.zip.sha256"
+          (cd dist && sha256sum *.zip *.tgz > SHA256SUMS.txt)
+          echo "BUILD_NAME=$BUILD" >> "$GITHUB_ENV"
+          echo "RELEASE_TITLE=dsh-chrome-use-v${VERSION}-${STAMP}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=build-${BUILD}" >> "$GITHUB_ENV"
           {
-            echo "## dsh-chrome-use $VERSION"
+            echo "## dsh-chrome-use $BUILD"
             echo ""
-            echo "Download the artifacts below:"
-            echo "- **dsh-plugin-$VERSION**: DSH plugin npm package (.tgz)."
-            echo "- **chrome-extension-$VERSION**: Chrome extension (.zip) and SHA-256 checksum."
+            echo "- DSH plugin: dsh-plugin-$BUILD.tgz"
+            echo "- Chrome extension: chrome-extension-$BUILD.zip"
+            echo "- Timestamps use Asia/Shanghai (UTC+8)."
             echo ""
             echo "Unzip the Chrome extension into a permanent folder, then load that folder at chrome://extensions with Developer mode enabled."
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
       - name: Upload DSH plugin
         uses: actions/upload-artifact@v4
         with:
-          name: dsh-plugin-${{ env.PACKAGE_VERSION }}
-          path: dist/*.tgz
+          name: dsh-plugin-${{ env.BUILD_NAME }}
+          path: |
+            dist/*.tgz
+            dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
       - name: Upload Chrome extension
         uses: actions/upload-artifact@v4
         with:
-          name: chrome-extension-${{ env.PACKAGE_VERSION }}
+          name: chrome-extension-${{ env.BUILD_NAME }}
           path: |
             dist/*.zip
-            dist/*.sha256
+            dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
+      - name: Publish build Release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "Build: $RELEASE_TITLE"
+            echo ""
+            echo "Commit: $GITHUB_SHA"
+            echo "Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo ""
+            echo "- DSH: install the .tgz package, then restart DSH."
+            echo "- Chrome: unzip the extension ZIP into a permanent folder and load it at chrome://extensions."
+            echo "- SHA256SUMS.txt contains checksums for both packages."
+            echo "- Build time uses Asia/Shanghai (UTC+8)."
+          } > dist/release-notes.md
+          gh release create "$RELEASE_TAG" dist/*.zip dist/*.tgz dist/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" --title "$RELEASE_TITLE" \
+            --notes-file dist/release-notes.md --latest=false
+          echo "Release: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
