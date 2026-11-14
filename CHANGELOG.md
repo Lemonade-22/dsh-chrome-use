@@ -1,3 +1,9 @@
+# 0.10.1
+
+- Add chrome_clear_cookies for named authentication cookies on a claimed page, without exposing values or clearing browser-wide cookies.
+- Support chrome_history reload with ignoreCache=true for stale development assets.
+- Document LuCI session expiry, re-login and incognito troubleshooting.
+
 # 更新日志
 
 版本号遵循语义化版本。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。

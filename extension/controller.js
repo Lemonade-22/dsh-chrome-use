@@ -729,6 +729,21 @@ export class BrowserController {
       }
       return { tabId, active: true, windowId: tabInfo.windowId ?? null, windowFocused };
     }
+    if (action === 'clear_cookies') {
+      if (!args.names.length) throw new Error('INVALID_ARGUMENT: names must not be empty');
+      const names = new Set(args.names);
+      const { cookies } = await cdp('Network.getCookies', { urls: [pageUrl(tabInfo.url)] });
+      let removed = 0;
+      for (const cookie of cookies) {
+        if (!names.has(cookie.name)) continue;
+        await cdp('Network.deleteCookies', {
+          name: cookie.name, domain: cookie.domain, path: cookie.path,
+          ...(cookie.partitionKey ? { partitionKey: cookie.partitionKey } : {}),
+        });
+        removed++;
+      }
+      return { tabId, removed, note: 'Reload and log in again. Other tabs sharing these cookies are also signed out; server sessions are not restored.' };
+    }
     if (action === 'navigate') {
       this.attached.get(tabId).refs.clear();
       const result = await cdp('Page.navigate', { url: pageUrl(args.url) });
@@ -736,6 +751,7 @@ export class BrowserController {
       return { tabId, navigationStarted: true, note: 'Loading may still be in progress. Take a fresh snapshot to inspect the result.' };
     }
     if (action === 'history') {
+      if (args.ignoreCache !== undefined && args.action !== 'reload') throw new Error('INVALID_ARGUMENT: ignoreCache requires action=reload');
       const state = this.attached.get(tabId);
       if (args.action === undefined) {
         const limit = args.limit ?? 50;
@@ -750,7 +766,7 @@ export class BrowserController {
       const { currentIndex, entries } = await cdp('Page.getNavigationHistory');
       if (args.action === 'reload') {
         const loaded = this.waitForLoad(state, signal);
-        await cdp('Page.reload', { ignoreCache: false });
+        await cdp('Page.reload', { ignoreCache: args.ignoreCache ?? false });
         return { tabId, action: 'reload', loaded: await loaded, note: 'Take a fresh snapshot; references from before the reload are stale.' };
       }
       const targetIndex = args.action === 'back' ? currentIndex - 1 : currentIndex + 1;

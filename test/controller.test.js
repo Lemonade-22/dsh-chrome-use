@@ -1065,3 +1065,49 @@ test('the click point is translated from a same-origin frame into top-level coor
   assert.deepEqual([inner.x, inner.y], [311, 157]);
   assert.equal(inner.frame, true);
 });
+
+
+test('hard reload forwards ignoreCache while normal reload preserves caching', async () => {
+  for (const ignoreCache of [true, false]) {
+    const { controller, calls, listeners } = fixture();
+    await controller.execute('claim', { tabId: 7 });
+    const pending = controller.execute('history', { tabId: 7, action: 'reload', ...(ignoreCache ? { ignoreCache } : {}) });
+    const result = pending.then(value => ({ value }), error => ({ error }));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    listeners.event({ tabId: 7 }, 'Page.loadEventFired', {});
+    const outcome = await result;
+    if (outcome.error) throw outcome.error;
+    assert.equal(calls.find(([method]) => method === 'Page.reload')[1].ignoreCache, ignoreCache);
+  }
+});
+
+test('clear_cookies deletes only requested cookies for the claimed URL without exposing values', async () => {
+  const { controller, calls } = fixture({
+    'Network.getCookies': () => ({ cookies: [
+      { name: 'sysauth', value: 'SECRET', domain: 'example.com', path: '/', httpOnly: true },
+      { name: 'sysauth', value: 'SECRET2', domain: 'example.com', path: '/cgi-bin', partitionKey: { topLevelSite: 'https://example.com', hasCrossSiteAncestor: false } },
+      { name: 'preference', value: 'keep', domain: 'example.com', path: '/' },
+    ] }),
+  });
+  await assert.rejects(controller.execute('clear_cookies', { tabId: 7, names: ['sysauth'] }), /TAB_NOT_ATTACHED/);
+  await controller.execute('claim', { tabId: 7 });
+  const result = await controller.execute('clear_cookies', { tabId: 7, names: ['sysauth'] });
+  assert.deepEqual(calls.find(([method]) => method === 'Network.getCookies')[1], { urls: ['https://example.com/'] });
+  const deletions = calls.filter(([method]) => method === 'Network.deleteCookies').map(([, params]) => params);
+  assert.deepEqual(deletions, [
+    { name: 'sysauth', domain: 'example.com', path: '/' },
+    { name: 'sysauth', domain: 'example.com', path: '/cgi-bin', partitionKey: { topLevelSite: 'https://example.com', hasCrossSiteAncestor: false } },
+  ]);
+  assert.equal(result.removed, 2);
+  assert.ok(!JSON.stringify(result).includes('SECRET'));
+  assert.ok(!calls.some(([method]) => method === 'Network.clearBrowserCookies'));
+});
+
+test('clear_cookies requires names and reports an empty match', async () => {
+  assert.throws(() => validateArgs('chrome_clear_cookies', { tabId: 7 }), /MISSING_ARGUMENT/);
+  const { controller, calls } = fixture({ 'Network.getCookies': () => ({ cookies: [] }) });
+  await controller.execute('claim', { tabId: 7 });
+  await assert.rejects(controller.execute('clear_cookies', { tabId: 7, names: [] }), /INVALID_ARGUMENT/);
+  assert.equal((await controller.execute('clear_cookies', { tabId: 7, names: ['sysauth'] })).removed, 0);
+  assert.ok(!calls.some(([method]) => method === 'Network.deleteCookies'));
+});
