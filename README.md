@@ -4,6 +4,17 @@
 
 同一个扩展和数据通道也能给 Codex、OpenCode、Workbody 等其他 Harness 使用：本包面向 DeepSeek Harness，其他 Harness 通过独立 JSON 运行器接入同一个 bridge，权限、端口和标签页规则完全一样。
 
+## 自动构建
+
+在本仓库的 [Actions → Build DSH plugin and Chrome extension](https://github.com/Lemonade-22/dsh-chrome-use/actions/workflows/check.yml) 中点 **Run workflow** 可手动构建；推送代码或提交 PR 时也会自动运行。
+
+构建先运行 Windows、macOS、Linux 上的 Node.js 22/24 检查和测试，成功后生成两个 Artifact，保留 30 天：
+
+- `dsh-plugin-<版本>`：DSH 插件安装包 `.tgz`。
+- `chrome-extension-<版本>`：Chrome 扩展 `.zip` 及 SHA-256 校验文件。
+
+打开成功的运行记录，在页面底部 **Artifacts** 下载。Artifact 本身是外层压缩包，解压后才是安装文件。Chrome 扩展还需将内层 ZIP 解压到固定目录，在 `chrome://extensions` 开启开发者模式并“加载已解压的扩展程序”。DSH 的 `.tgz` 可通过 `dsh plugin --profile desktop add "安装包的绝对路径"` 安装，完成后重启 DSH。
+
 ## 安装
 
 > **先装 Harness 插件，再装 Chrome 扩展，最后配对。** 插件有三种装法，选一种，命令直接复制。
